@@ -18,6 +18,7 @@ Reusing failure exceptions serves several purposes:
 """
 FAILED = exceptions.AuthenticationFailed('Invalid signature.')
 
+
 class SignatureAuthentication(authentication.BaseAuthentication):
     """
     DRF authentication class for HTTP Signature support.
@@ -38,7 +39,7 @@ class SignatureAuthentication(authentication.BaseAuthentication):
     www_authenticate_realm = "api"
     required_headers = ["(request-target)", "date"]
     
-    def fetch_user_data(self, keyId, algorithm=None):
+    def fetch_user_data(self, key_id, algorithm=None):
         """Retuns a tuple (User, secret) or (None, None)."""
         raise NotImplementedError()
 
@@ -47,7 +48,7 @@ class SignatureAuthentication(authentication.BaseAuthentication):
         DRF sends this for unauthenticated responses if we're the primary
         authenticator.
         """
-        h = " ".join(required_headers)
+        h = " ".join(self.required_headers)
         return 'Signature realm="%s",headers="%s"' % (self.www_authenticate_realm, h)
     
     def authenticate(self, request):
@@ -73,14 +74,14 @@ class SignatureAuthentication(authentication.BaseAuthentication):
             raise FAILED
         
         # Ensure all required fields were included.
-        if len(set(("keyid","algorithm","signature")) - set(fields.keys())) > 0:
+        if len({"keyid", "algorithm", "signature"} - set(fields.keys())) > 0:
             raise FAILED
         
         # Fetch the secret associated with the keyid
         user, secret = self.fetch_user_data(
             fields["keyid"],
             algorithm=fields["algorithm"]
-            )
+        )
         
         if not (user and secret):
             raise FAILED
@@ -90,11 +91,10 @@ class SignatureAuthentication(authentication.BaseAuthentication):
         headers = {}
         for key in request.META.keys():
             if key.startswith("HTTP_") or \
-                key in ("CONTENT_TYPE", "CONTENT_LENGTH"):
-                
+                    key in ("CONTENT_TYPE", "CONTENT_LENGTH"):
                 header = key[5:].lower().replace('_', '-')
                 headers[header] = request.META[key]
-        
+
         # Verify headers
         hs = HeaderVerifier(
             headers,
@@ -102,10 +102,10 @@ class SignatureAuthentication(authentication.BaseAuthentication):
             required_headers=self.required_headers,
             method=request.method.lower(),
             path=request.get_full_path()
-            )
+        )
         
         # All of that just to get to this.
         if not hs.verify():
             raise FAILED            
         
-        return (user, fields["keyid"])
+        return user, fields["keyid"]
